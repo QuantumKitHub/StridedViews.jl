@@ -315,7 +315,7 @@ if !is_buildkite
     end
 end
 
-using CUDA, AMDGPU
+using CUDA, AMDGPU, Metal
 
 if CUDA.functional()
     @testset "CuArrays with StridedView" begin
@@ -339,6 +339,20 @@ if AMDGPU.functional()
             B = StridedView(A)
             @test B isa StridedView
             AMDGPU.@allowscalar begin
+                @test B == A
+            end
+        end
+    end
+end
+
+if Metal.functional()
+    @testset "MtlArrays with StridedView" begin
+        @testset for T in (Float32, ComplexF32)
+            A = MtlArray(randn(T, 10, 10, 10, 10))
+            @test isstrided(A)
+            B = StridedView(A)
+            @test B isa StridedView
+            Metal.@allowscalar begin
                 @test B == A
             end
         end
