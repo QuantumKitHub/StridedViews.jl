@@ -2,6 +2,7 @@ using Test
 using LinearAlgebra
 using Random
 using StridedViews
+using Adapt
 using JLArrays
 
 Random.seed!(1234)
@@ -301,8 +302,9 @@ if !is_buildkite
             JLArrays.@allowscalar begin
                 @test B == A
             end
-            Bvec = JLArrays.Adapt.adapt(Vector{T}, B)
+            Bvec = adapt(Vector{T}, B)
             @test Bvec == StridedView(Araw)
+            @test parent(adapt(JLArray, Bvec)) isa JLArray
         end
     end
 
