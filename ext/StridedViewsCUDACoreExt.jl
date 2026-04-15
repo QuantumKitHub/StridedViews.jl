@@ -1,8 +1,8 @@
-module StridedViewsCUDAExt
+module StridedViewsCUDACoreExt
 
 using StridedViews
-using CUDA
-using CUDA: Adapt, CuPtr
+using CUDACore
+using CUDACore: Adapt, CuPtr
 
 const CuStridedView{T, N, A <: CuArray{T}} = StridedView{T, N, A}
 
