@@ -1,16 +1,16 @@
 using Test
+using Aqua, JET
 using LinearAlgebra
 using Random
 using StridedViews
 using Adapt
-using JLArrays
+using PtrArrays, JLArrays, CUDACore, AMDGPU, Metal
 
 Random.seed!(1234)
 
 is_buildkite = get(ENV, "BUILDKITE", "false") == "true"
 
 if !is_buildkite
-
     @testset "construction of StridedView" begin
         @testset for T1 in (Float32, Float64, Complex{Float32}, Complex{Float64})
             A1 = randn(T1, (60, 60))
@@ -280,15 +280,14 @@ if !is_buildkite
         end
     end
 
-    using PtrArrays
     @testset "PtrArrays with StridedView" begin
         @testset for T in (Float64, ComplexF64)
-            A = randn!(malloc(T, 10, 10, 10, 10))
+            A = randn!(PtrArrays.malloc(T, 10, 10, 10, 10))
             @test isstrided(A)
             B = StridedView(A)
             @test B isa StridedView
             @test B == A
-            free(A)
+            PtrArrays.free(A)
         end
     end
 
@@ -308,16 +307,12 @@ if !is_buildkite
         end
     end
 
-    using Aqua
     Aqua.test_all(StridedViews)
 
     if isempty(VERSION.prerelease)
-        using JET
         JET.test_package(StridedViews; target_modules = (StridedViews,))
     end
 end
-
-using CUDACore, AMDGPU, Metal
 
 if CUDACore.functional()
     @testset "CuArrays with StridedView" begin
