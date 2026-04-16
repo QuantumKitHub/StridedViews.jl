@@ -5,7 +5,6 @@ version = "0.5.0"
 
 [deps]
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
-PackageExtensionCompat = "65ce6f38-6b18-4e1d-a461-8949797d7930"
 
 [weakdeps]
 AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
@@ -31,7 +30,6 @@ JET = "0.9, 0.10, 0.11"
 JLArrays = "0.3.1"
 LinearAlgebra = "1.6"
 Metal = "1.9.3"
-PackageExtensionCompat = "1"
 PtrArrays = "1.2.0"
 Random = "1.6"
 Test = "1.6"
