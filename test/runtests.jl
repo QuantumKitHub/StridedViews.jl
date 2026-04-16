@@ -1,5 +1,5 @@
 using Test
-using Aqua, JET
+using Aqua
 using LinearAlgebra
 using Random
 using StridedViews
@@ -308,10 +308,6 @@ if !is_buildkite
     end
 
     Aqua.test_all(StridedViews)
-
-    if isempty(VERSION.prerelease)
-        JET.test_package(StridedViews; target_modules = (StridedViews,))
-    end
 end
 
 if CUDACore.functional()
@@ -355,3 +351,5 @@ if Metal.functional()
         end
     end
 end
+
+!is_buildkite && include("jet/jet.jl")

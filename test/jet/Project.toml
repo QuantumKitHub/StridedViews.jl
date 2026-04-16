@@ -1,0 +1,11 @@
+name = "StridedViewsJETTest"
+
+[deps]
+JET = "c3a54625-cd67-489e-a8e7-0a5a0ff4e31b"
+StridedViews = "4db3bf67-4bd7-4b4e-b153-31dc3fb37143"
+
+[sources]
+StridedViews = {path = "../.."}
+
+[compat]
+JET = "0.9, 0.10, 0.11"
