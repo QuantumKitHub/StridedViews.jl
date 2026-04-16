@@ -315,16 +315,16 @@ if !is_buildkite
     end
 end
 
-using CUDA, AMDGPU, Metal
+using CUDACore, AMDGPU, Metal
 
-if CUDA.functional()
+if CUDACore.functional()
     @testset "CuArrays with StridedView" begin
         @testset for T in (Float64, ComplexF64)
-            A = CUDA.randn(T, 10, 10, 10, 10)
+            A = CUDACore.randn(T, 10, 10, 10, 10)
             @test isstrided(A)
             B = StridedView(A)
             @test B isa StridedView
-            CUDA.@allowscalar begin
+            CUDACore.@allowscalar begin
                 @test B == A
             end
         end
