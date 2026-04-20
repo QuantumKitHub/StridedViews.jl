@@ -10,9 +10,4 @@ export StridedView, sreshape, sview, isstrided
 include("auxiliary.jl")
 include("stridedview.jl")
 
-using PackageExtensionCompat
-function __init__()
-    return @require_extensions
-end
-
 end

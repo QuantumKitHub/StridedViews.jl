@@ -1,0 +1,24 @@
+name = "StridedViewsTest"
+
+[deps]
+AMDGPU = "21141c5a-9bdb-4563-92ae-f87d6854732e"
+Adapt = "79e6a3ab-5dfb-504d-930d-738a2a938a0e"
+Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
+CUDACore = "bd0ed864-bdfe-4181-a5ed-ce625a5fdea2"
+JLArrays = "27aeb0d3-9eb9-45fb-866b-73c2ecf80fcb"
+LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
+Metal = "dde4c033-4e86-420c-a63e-0dd931031962"
+Pkg = "44cfe95a-1eb2-52ea-b672-e2afdf69b78f"
+PtrArrays = "43287f4e-b6f4-7ad1-bb20-aadabca52c3d"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+StridedViews = "4db3bf67-4bd7-4b4e-b153-31dc3fb37143"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
+
+[sources]
+StridedViews = {path = ".."}
+
+[compat]
+Aqua = "0.8"
+Pkg = "1"
+Random = "1"
+Test = "1"
