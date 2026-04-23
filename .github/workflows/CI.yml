@@ -14,26 +14,23 @@ concurrency:
 
 jobs:
   test:
-    name: Julia ${{ matrix.version }} - ${{ matrix.os }} - ${{ matrix.arch }}
+    name: Julia ${{ matrix.version }} - ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         version:
-          - 'lts' # current LTS version
-          - '1' # latest stable 1.x release of Julia
+          - 'min'
+          - '1'
         os:
           - ubuntu-latest
           - macOS-latest
           - windows-latest
-        arch:
-          - x64
     steps:
       - uses: actions/checkout@v6
-      - uses: julia-actions/setup-julia@v2
+      - uses: julia-actions/setup-julia@v3
         with:
           version: ${{ matrix.version }}
-          arch: ${{ matrix.arch }}
       - uses: julia-actions/cache@v3
       - uses: julia-actions/julia-buildpkg@latest
       - uses: julia-actions/julia-runtest@latest
@@ -45,7 +42,7 @@ jobs:
           file: lcov.info
   test-nightly:
     needs: test
-    name: Julia nightly - ${{ matrix.os }} - ${{ matrix.arch }}
+    name: Julia nightly - ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -56,14 +53,11 @@ jobs:
           - ubuntu-latest
           - macOS-latest
           - windows-latest
-        arch:
-          - x64
     steps:
       - uses: actions/checkout@v6
-      - uses: julia-actions/setup-julia@v2
+      - uses: julia-actions/setup-julia@v3
         with:
           version: ${{ matrix.version }}
-          arch: ${{ matrix.arch }}
       - uses: julia-actions/cache@v3
       - uses: julia-actions/julia-buildpkg@latest
       - uses: julia-actions/julia-runtest@latest
