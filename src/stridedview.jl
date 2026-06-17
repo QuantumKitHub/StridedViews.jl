@@ -139,9 +139,6 @@ end
 end
 
 # Indexing with slice indices to create a new view.
-# This builds a *new* view (a once-per-operation setup step, not a hot inner loop), so we
-# deliberately do not force-inline it: `@inline` here duplicated the per-N size/stride/offset
-# computation into every downstream caller instead of compiling it once per signature.
 function Base.getindex(a::StridedView{T, N}, I::Vararg{SliceIndex, N}) where {T, N}
     return StridedView{T}(
         a.parent,
@@ -251,8 +248,7 @@ function Base.show(io::IO, e::ReshapeException)
     return print(io, msg)
 end
 
-# we cannot use Base.reshape, as this also accepts indices that might not preserve
-# stridedness
+# we cannot use Base.reshape, as this also accepts indices that might not preserve stridedness
 sreshape(a, args::Vararg{Int}) = sreshape(a, args)
 function sreshape(a::StridedView{T}, newsize::Dims) where {T}
     if any(isequal(0), newsize)
