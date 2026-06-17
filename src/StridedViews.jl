@@ -9,5 +9,6 @@ export StridedView, sreshape, sview, isstrided
 
 include("auxiliary.jl")
 include("stridedview.jl")
+include("precompile.jl")
 
 end
