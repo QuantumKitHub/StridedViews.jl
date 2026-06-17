@@ -58,7 +58,7 @@ end
 #------------------------------
 # Compute the new dimensions of a strided view given the original size and the view slicing
 # indices
-function _computeviewsize(oldsize::NTuple{N, Int}, I::NTuple{N, SliceIndex}) where {N}
+@inline function _computeviewsize(oldsize::NTuple{N, Int}, I::NTuple{N, SliceIndex}) where {N}
     if isa(I[1], Int)
         return _computeviewsize(tail(oldsize), tail(I))
     elseif isa(I[1], Colon)
@@ -71,7 +71,7 @@ _computeviewsize(::Tuple{}, ::Tuple{}) = ()
 
 # Compute the new strides of a (strided) view given the original strides and the view
 # slicing indices
-function _computeviewstrides(
+@inline function _computeviewstrides(
         oldstrides::NTuple{N, Int},
         I::NTuple{N, SliceIndex}
     ) where {N}
@@ -90,7 +90,7 @@ _computeviewstrides(::Tuple{}, ::Tuple{}) = ()
 
 # Compute the additional offset of a (strided) view given the original strides and the view
 # slicing indices
-function _computeviewoffset(
+@inline function _computeviewoffset(
         strides::NTuple{N, Int},
         I::NTuple{N, SliceIndex}
     ) where {N}
