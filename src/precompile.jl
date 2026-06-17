@@ -4,29 +4,29 @@
 # range of dimensionalities and the op-wrappers a `StridedView` can carry. These are the
 # specializations that downstream packages (e.g. TensorOperations / Strided) hit on their
 # first call, so warming them here removes that first-call latency.
-#
-# The workload is deliberately kept small (BLAS floats, ndims 1:4, identity/conj plus the
-# 2D transpose/adjoint cases) so that it adds only a bounded amount to StridedViews' own
-# precompile time.
 using PrecompileTools: @setup_workload, @compile_workload
 
 @setup_workload begin
     @compile_workload begin
         for T in (Float32, Float64, ComplexF32, ComplexF64)
             # construction + property queries + core ops for ndims 1:4
-            for N in 1:4
+            for N in 1:6
                 A = Array{T, N}(undef, ntuple(_ -> 2, N))
                 sv = StridedView(A)
                 size(sv)
                 strides(sv)
                 offset(sv)
-                conj(sv)
+                csv = conj(sv)
                 # permute through the identity permutation (exercises the per-N path)
                 permutedims(sv, ntuple(identity, N))
+                permutedims(csv, ntuple(identity, N))
                 # reshape to a flat vector and back (also exercises sview on the flat view)
                 flat = sreshape(sv, (length(sv),))
                 sview(flat, 1:length(sv))
                 getindex(sv, ntuple(_ -> 1, N)...)
+                flat = sreshape(csv, (length(sv),))
+                sview(flat, 1:length(csv))
+                getindex(csv, ntuple(_ -> 1, N)...)
             end
             # 2D matrix wrappers: transpose / adjoint
             M = Array{T, 2}(undef, 2, 2)
