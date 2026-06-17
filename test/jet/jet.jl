@@ -2,6 +2,7 @@
     import Pkg
     try
         Pkg.activate(joinpath(@__DIR__); io = devnull)
+        Pkg.develop(Pkg.PackageSpec(path = joinpath(@__DIR__, "..", "..")); io = devnull)
         Pkg.instantiate(; io = devnull)
         @eval import JET
         JET.test_package(StridedViews; target_modules = (StridedViews,))
