@@ -138,8 +138,11 @@ end
     return a
 end
 
-# Indexing with slice indices to create a new view
-@inline function Base.getindex(a::StridedView{T, N}, I::Vararg{SliceIndex, N}) where {T, N}
+# Indexing with slice indices to create a new view.
+# This builds a *new* view (a once-per-operation setup step, not a hot inner loop), so we
+# deliberately do not force-inline it: `@inline` here duplicated the per-N size/stride/offset
+# computation into every downstream caller instead of compiling it once per signature.
+function Base.getindex(a::StridedView{T, N}, I::Vararg{SliceIndex, N}) where {T, N}
     return StridedView{T}(
         a.parent,
         _computeviewsize(a.size, I),
@@ -179,7 +182,7 @@ function Base.conj(a::StridedView)
     return StridedView{T}(a.parent, a.size, a.strides, a.offset, newop)
 end
 
-@inline function Base.permutedims(a::StridedView{T, N}, p) where {T, N}
+function Base.permutedims(a::StridedView{T, N}, p) where {T, N}
     _isperm(N, p) || throw(ArgumentError("Invalid permutation of length $N: $p"))
     newsize = ntuple(n -> size(a, p[n]), Val(N))
     newstrides = ntuple(n -> stride(a, p[n]), Val(N))
@@ -228,10 +231,10 @@ sview(a::StridedView, I::SliceIndex) = getindex(sreshape(a, (length(a),)), I)
 Base.view(a::StridedView{<:Any, N}, I::Vararg{SliceIndex, N}) where {N} = getindex(a, I...)
 
 # `sview` can be used as a constructor when acting on `AbstractArray` objects
-@inline function sview(a::AbstractArray{<:Any, N}, I::Vararg{SliceIndex, N}) where {N}
+function sview(a::AbstractArray{<:Any, N}, I::Vararg{SliceIndex, N}) where {N}
     return getindex(StridedView(a), I...)
 end
-@inline function sview(a::AbstractArray, I::SliceIndex)
+function sview(a::AbstractArray, I::SliceIndex)
     return getindex(sreshape(StridedView(a), (length(a),)), I)
 end
 
@@ -251,7 +254,7 @@ end
 # we cannot use Base.reshape, as this also accepts indices that might not preserve
 # stridedness
 sreshape(a, args::Vararg{Int}) = sreshape(a, args)
-@inline function sreshape(a::StridedView{T}, newsize::Dims) where {T}
+function sreshape(a::StridedView{T}, newsize::Dims) where {T}
     if any(isequal(0), newsize)
         any(isequal(0), size(a)) || throw(DimensionMismatch())
         newstrides = one.(newsize)
