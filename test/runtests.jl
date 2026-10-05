@@ -11,6 +11,7 @@ Random.seed!(1234)
 is_buildkite = get(ENV, "BUILDKITE", "false") == "true"
 
 if !is_buildkite
+    include("aliasing.jl")
     @testset "construction of StridedView" begin
         @testset for T1 in (Float32, Float64, Complex{Float32}, Complex{Float64})
             A1 = randn(T1, (60, 60))

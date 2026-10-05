@@ -286,3 +286,9 @@ function Base.elsize(::Type{<:StridedView{T, N, A}}) where {T, N, A}
     return Base.elsize(A)
 end
 Base.dataids(a::StridedView) = Base.dataids(a.parent)
+
+# The parents may have a more precise alias check than their shared-storage dataids.
+# Disjoint parents imply disjoint views; overlapping parents remain conservative.
+function Base.mightalias(a::StridedView, b::StridedView)
+    return !isempty(a) && !isempty(b) && Base.mightalias(parent(a), parent(b))
+end
