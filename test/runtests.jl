@@ -11,7 +11,6 @@ Random.seed!(1234)
 is_buildkite = get(ENV, "BUILDKITE", "false") == "true"
 
 if !is_buildkite
-    include("aliasing.jl")
     @testset "construction of StridedView" begin
         @testset for T1 in (Float32, Float64, Complex{Float32}, Complex{Float64})
             A1 = randn(T1, (60, 60))
@@ -293,6 +292,20 @@ if !is_buildkite
     end
 
     @testset "JLArrays with StridedView" begin
+        @testset "alias detection" begin
+            buffer = JLArray{Float32}(undef, 16)
+            left = view(buffer, 1:8)
+            right = view(buffer, 9:16)
+            overlap = view(buffer, 5:12)
+            # Preserve the parents' alias check, including byte-range specializations.
+            for other in (left, right, overlap)
+                @test Base.mightalias(StridedView(left), StridedView(other)) ==
+                    Base.mightalias(left, other)
+            end
+            empty = sview(StridedView(left), 3:2)
+            @test !Base.mightalias(empty, StridedView(left))
+            @test !Base.mightalias(StridedView(left), empty)
+        end
         @testset for T in (Float64, ComplexF64)
             Araw = randn(T, 10, 10, 10, 10)
             A = JLArray(Araw)
