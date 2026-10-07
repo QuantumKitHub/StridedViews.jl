@@ -71,7 +71,9 @@ function StridedView(a::Base.ReinterpretArray{T, N}) where {T, N}
         throw(ArgumentError("Cannot create StridedView with reinterpretation from $S to $T"))
     b.op isa FN ||
         throw(ArgumentError("Cannot create StridedView with reinterpretation from view with non-identity operation"))
-    return StridedView{T}(b.parent, size(b), strides(b), offset(b))
+    return StridedView{T, ndims(b), typeof(b.parent), FN}(
+        b.parent, size(b), strides(b), offset(b), identity
+    )
 end
 
 # trait
@@ -140,10 +142,12 @@ end
 
 # Indexing with slice indices to create a new view.
 function Base.getindex(a::StridedView{T, N}, I::Vararg{SliceIndex, N}) where {T, N}
-    return StridedView{T}(
+    newsize = _computeviewsize(a.size, I)
+    newstrides = _normalizestrides(newsize, _computeviewstrides(a.strides, I))
+    return StridedView{T, length(newsize), typeof(a.parent), typeof(a.op)}(
         a.parent,
-        _computeviewsize(a.size, I),
-        _computeviewstrides(a.strides, I),
+        newsize,
+        newstrides,
         a.offset + _computeviewoffset(a.strides, I),
         a.op
     )
@@ -170,20 +174,27 @@ end
 #----------------------------------------------------------------------------
 Base.conj(a::StridedView{<:Real}) = a
 function Base.conj(a::StridedView{T}) where {T <: Complex}
-    return StridedView{T}(a.parent, a.size, a.strides, a.offset, _conj(a.op))
+    newop = _conj(a.op)
+    return StridedView{T, ndims(a), typeof(a.parent), typeof(newop)}(
+        a.parent, a.size, a.strides, a.offset, newop
+    )
 end
 function Base.conj(a::StridedView)
     S = Base.promote_op(a.op, eltype(a))
     newop = _conj(a.op)
     T = Base.promote_op(newop, S)
-    return StridedView{T}(a.parent, a.size, a.strides, a.offset, newop)
+    return StridedView{T, ndims(a), typeof(a.parent), typeof(newop)}(
+        a.parent, a.size, a.strides, a.offset, newop
+    )
 end
 
 function Base.permutedims(a::StridedView{T, N}, p) where {T, N}
     _isperm(N, p) || throw(ArgumentError("Invalid permutation of length $N: $p"))
     newsize = ntuple(n -> size(a, p[n]), Val(N))
     newstrides = ntuple(n -> stride(a, p[n]), Val(N))
-    return StridedView{T}(a.parent, newsize, newstrides, a.offset, a.op)
+    return typeof(a)(
+        a.parent, newsize, _normalizestrides(newsize, newstrides), a.offset, a.op
+    )
 end
 
 LinearAlgebra.transpose(a::StridedView{<:Number, 2}) = permutedims(a, (2, 1))
@@ -192,13 +203,21 @@ function LinearAlgebra.adjoint(a::StridedView{<:Any, 2}) # act recursively, like
     S = Base.promote_op(a.op, eltype(a))
     newop = _adjoint(a.op)
     T = Base.promote_op(newop, S)
-    return permutedims(StridedView{T}(a.parent, a.size, a.strides, a.offset, newop), (2, 1))
+    return permutedims(
+        StridedView{T, ndims(a), typeof(a.parent), typeof(newop)}(
+            a.parent, a.size, a.strides, a.offset, newop
+        ), (2, 1)
+    )
 end
 function LinearAlgebra.transpose(a::StridedView{<:Any, 2}) # act recursively, like Base
     S = Base.promote_op(a.op, eltype(a))
     newop = _transpose(a.op)
     T = Base.promote_op(newop, S)
-    return permutedims(StridedView{T}(a.parent, a.size, a.strides, a.offset, newop), (2, 1))
+    return permutedims(
+        StridedView{T, ndims(a), typeof(a.parent), typeof(newop)}(
+            a.parent, a.size, a.strides, a.offset, newop
+        ), (2, 1)
+    )
 end
 
 Base.map(::FC, a::StridedView{<:Real}) = a
@@ -206,15 +225,24 @@ Base.map(::FT, a::StridedView{<:Number}) = a
 Base.map(::FA, a::StridedView{<:Number}) = conj(a)
 function Base.map(::FC, a::StridedView)
     T = Base.promote_op(conj, eltype(a))
-    return StridedView{T}(a.parent, a.size, a.strides, a.offset, _conj(a.op))
+    newop = _conj(a.op)
+    return StridedView{T, ndims(a), typeof(a.parent), typeof(newop)}(
+        a.parent, a.size, a.strides, a.offset, newop
+    )
 end
 function Base.map(::FT, a::StridedView)
     T = Base.promote_op(transpose, eltype(a))
-    return StridedView{T}(a.parent, a.size, a.strides, a.offset, _transpose(a.op))
+    newop = _transpose(a.op)
+    return StridedView{T, ndims(a), typeof(a.parent), typeof(newop)}(
+        a.parent, a.size, a.strides, a.offset, newop
+    )
 end
 function Base.map(::FA, a::StridedView)
     T = Base.promote_op(adjoint, eltype(a))
-    return StridedView{T}(a.parent, a.size, a.strides, a.offset, _adjoint(a.op))
+    newop = _adjoint(a.op)
+    return StridedView{T, ndims(a), typeof(a.parent), typeof(newop)}(
+        a.parent, a.size, a.strides, a.offset, newop
+    )
 end
 
 # Creating or transforming StridedView by slicing
@@ -251,6 +279,7 @@ end
 # we cannot use Base.reshape, as this also accepts indices that might not preserve stridedness
 sreshape(a, args::Vararg{Int}) = sreshape(a, args)
 function sreshape(a::StridedView{T}, newsize::Dims) where {T}
+    size(a) == newsize && return a
     if any(isequal(0), newsize)
         any(isequal(0), size(a)) || throw(DimensionMismatch())
         newstrides = one.(newsize)
@@ -258,7 +287,9 @@ function sreshape(a::StridedView{T}, newsize::Dims) where {T}
         newstrides = _computereshapestrides(newsize, _simplifydims(size(a), strides(a))...)
     end
     isnothing(newstrides) && throw(ReshapeException(newsize, size(a), strides(a)))
-    return StridedView{T}(a.parent, newsize, newstrides, a.offset, a.op)
+    return StridedView{T, length(newsize), typeof(a.parent), typeof(a.op)}(
+        a.parent, newsize, _normalizestrides(newsize, newstrides), a.offset, a.op
+    )
 end
 
 sreshape(a::AbstractArray, newsize::Dims) = sreshape(StridedView(a), newsize)
