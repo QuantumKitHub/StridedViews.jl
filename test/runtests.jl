@@ -222,14 +222,23 @@ if !is_buildkite
             @testset "more reshape" begin
                 A = randn(4, 0)
                 B = StridedView(A)
+                @test sreshape(B, size(B)) === B
                 @test_throws DimensionMismatch sreshape(B, (4, 1))
                 C = sreshape(B, (2, 1, 2, 0, 1))
+                @test strides(C) == (1, 2, 2, 4, 0)
                 @test sreshape(C, (4, 0)) == A
 
                 A = randn(4, 1, 2)
                 B = StridedView(A)
                 @test_throws DimensionMismatch sreshape(B, (4, 4))
+                @test sreshape(B, size(B)) === B
+                @test strides(permutedims(B, (2, 1, 3))) == (1, 1, 4)
+                @test strides(B[1:2:3, :, :]) == (2, 4, 4)
+                @test StridedView(
+                    B.parent, size(B), strides(B), B.offset, B.op; normalize = false
+                ) === B
                 C = sreshape(B, (2, 1, 1, 4, 1, 1))
+                @test strides(C) == (1, 2, 2, 2, 8, 8)
                 @test C == reshape(A, (2, 1, 1, 4, 1, 1))
                 @test sreshape(C, (4, 1, 2)) == A
             end
