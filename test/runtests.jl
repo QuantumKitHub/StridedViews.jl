@@ -234,9 +234,10 @@ if !is_buildkite
                 @test sreshape(B, size(B)) === B
                 @test strides(permutedims(B, (2, 1, 3))) == (1, 1, 4)
                 @test strides(B[1:2:3, :, :]) == (2, 4, 4)
-                @test StridedView(
-                    B.parent, size(B), strides(B), B.offset, B.op; normalize = false
+                @test StridedViews._stridedview(
+                    eltype(B), B.parent, size(B), strides(B), B.offset, B.op
                 ) === B
+                @test @inferred(StridedView(A)) == A
                 C = sreshape(B, (2, 1, 1, 4, 1, 1))
                 @test strides(C) == (1, 2, 2, 2, 8, 8)
                 @test C == reshape(A, (2, 1, 1, 4, 1, 1))
