@@ -46,15 +46,14 @@ function _normalizestrides(size::Dims{N}, strides::Dims{N}) where {N}
 end
 
 # 'Normalize' the layout of a DenseArray, in order to reduce the number of required
-# specializations in functions. The offset is adjusted for the start of `A` in the
+# specializations in functions. The offset is adjusted to the start of `A` in the
 # normalized parent.
-@inline _normalizeparent(A) = A
-@inline _normalizeoffset(A, offset::Int) = offset
+@inline _normalizeparent(A, offset::Int) = A, offset
 @static if isdefined(Core, :Memory)
-    @inline _normalizeparent(A::Array) = A.ref.mem
-    @inline _normalizeoffset(A::Array, offset::Int) = offset + Base.memoryrefoffset(A.ref) - 1
+    @inline _normalizeparent(A::Array, offset::Int) =
+        A.ref.mem, offset + Base.memoryrefoffset(A.ref) - 1
 else
-    @inline _normalizeparent(A::Array) = reshape(A, length(A))
+    @inline _normalizeparent(A::Array, offset::Int) = reshape(A, length(A)), offset
 end
 
 # Auxiliary methods for `sview`
