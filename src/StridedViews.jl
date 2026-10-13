@@ -6,6 +6,9 @@ const SliceIndex = Union{RangeIndex, Colon}
 
 using LinearAlgebra
 export StridedView, sreshape, sview, isstrided
+@static if VERSION >= v"1.11.0-DEV.469"
+    eval(Expr(:public, :unsafe_stridedview))
+end
 
 include("auxiliary.jl")
 include("stridedview.jl")
