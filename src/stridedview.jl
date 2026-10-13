@@ -56,7 +56,12 @@ function StridedView{T}(
     return StridedView{T, N, typeof(parent′), F}(parent′, size, strides′, offset, op)
 end
 
-# `parent` and `strides` taken from an existing `StridedView` are already normalized
+"""
+    unsafe_stridedview(T, parent, size, strides, offset, op)
+
+Construct a `StridedView{T}` without normalizing `parent` and `strides`, which are assumed to
+be normalized already, e.g. because they are taken from an existing `StridedView`.
+"""
 function unsafe_stridedview(
         ::Type{T}, parent::DenseArray, size::NTuple{N, Int}, strides::NTuple{N, Int},
         offset::Int, op::F
