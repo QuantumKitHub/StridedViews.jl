@@ -51,9 +51,9 @@ function StridedView{T}(
         offset::Int = 0,
         op::F = identity
     ) where {T, N, F}
-    parent′ = _normalizeparent(parent)
+    parent′, offset′ = _normalizeparent(parent, offset)
     strides′ = _normalizestrides(size, strides)
-    return StridedView{T, N, typeof(parent′), F}(parent′, size, strides′, offset, op)
+    return StridedView{T, N, typeof(parent′), F}(parent′, size, strides′, offset′, op)
 end
 
 """

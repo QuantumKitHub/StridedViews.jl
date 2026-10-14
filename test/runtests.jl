@@ -151,6 +151,19 @@ if !is_buildkite
         @test !isstrided(Diagonal([0.5, 1.0, 1.5]))
     end
 
+    @testset "arrays not starting at the beginning of their memory" begin
+        v = collect(1.0:6.0)
+        popfirst!(v)
+        @test StridedView(v) == v
+        @test pointer(StridedView(v)) == pointer(v)
+        M = reshape(deleteat!(collect(1.0:8.0), 1:2), 2, 3)
+        @test StridedView(M) == M
+        @test StridedView(M)[:, 2:3] == M[:, 2:3]
+        @test sview(M, 2, :) == M[2, :]
+        StridedView(M)[2, 1] = 0
+        @test M[2, 1] == 0
+    end
+
     @testset "transpose and adjoint with vector StridedView" begin
         @testset for T in (Float32, Float64, Complex{Float32}, Complex{Float64})
             A = randn(T, (60,))
