@@ -393,4 +393,13 @@ if Metal.functional()
     end
 end
 
-!is_buildkite && include("jet/jet.jl")
+if !is_buildkite 
+    # JET tests: JET ≥ 0.12 (Julia 1.12+) signals through `JET_AVAILABLE` whether it is functional,
+    # and loads empty stubs when it is not. Older JET versions, still needed on Julia < 1.12, do not
+    # define it, hence the `isdefined` check instead of `using JET: JET_AVAILABLE`.
+    using JET: JET
+    const jet_new_generation = isdefined(JET, :JET_AVAILABLE)
+    const jet_available = !jet_new_generation || JET.JET_AVAILABLE
+    # whole-package analysis is pinned to the JET 0.12 generation, so its reports need not be curated for several JET/Julia combinations
+    (jet_new_generation && jet_available) && include("jet.jl")
+end
