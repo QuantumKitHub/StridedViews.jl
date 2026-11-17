@@ -393,7 +393,7 @@ if Metal.functional()
     end
 end
 
-if !is_buildkite 
+if !is_buildkite
     # JET tests: JET ≥ 0.12 (Julia 1.12+) signals through `JET_AVAILABLE` whether it is functional,
     # and loads empty stubs when it is not. Older JET versions, still needed on Julia < 1.12, do not
     # define it, hence the `isdefined` check instead of `using JET: JET_AVAILABLE`.
