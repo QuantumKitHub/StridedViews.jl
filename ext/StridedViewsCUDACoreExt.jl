@@ -6,6 +6,8 @@ using CUDACore: Adapt, CuPtr
 
 const CuStridedView{T, N, A <: CuArray{T}} = StridedView{T, N, A}
 
+StridedViews._normalizeparent(A::CuArray, offset::Int) = reshape(A, length(A)), offset
+
 function Base.pointer(x::CuStridedView{T}) where {T}
     return Base.unsafe_convert(CuPtr{T}, pointer(x.parent, x.offset + 1))
 end

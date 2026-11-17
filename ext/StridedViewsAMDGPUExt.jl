@@ -6,6 +6,8 @@ using AMDGPU: Adapt
 
 const ROCStridedView{T, N, A <: ROCArray{T}} = StridedView{T, N, A}
 
+StridedViews._normalizeparent(A::ROCArray, offset::Int) = reshape(A, length(A)), offset
+
 function Base.pointer(x::ROCStridedView{T}) where {T}
     return Base.unsafe_convert(Ptr{T}, pointer(x.parent, x.offset + 1))
 end

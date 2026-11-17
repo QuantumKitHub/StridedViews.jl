@@ -350,12 +350,14 @@ end
 if CUDACore.functional()
     @testset "CuArrays with StridedView" begin
         @testset for T in (Float64, ComplexF64)
-            A = CUDACore.randn(T, 10, 10, 10, 10)
+            A = CuArray(randn(T, 10, 10, 10, 10))
             @test isstrided(A)
             B = StridedView(A)
             @test B isa StridedView
+            @test parent(B) isa CuArray{T, 1}
             CUDACore.@allowscalar begin
                 @test B == A
+                @test parent(B) == reshape(A, :)
             end
         end
     end
@@ -368,8 +370,10 @@ if AMDGPU.functional()
             @test isstrided(A)
             B = StridedView(A)
             @test B isa StridedView
+            @test parent(B) isa ROCArray{T, 1}
             AMDGPU.@allowscalar begin
                 @test B == A
+                @test parent(B) == reshape(A, :)
             end
         end
     end
