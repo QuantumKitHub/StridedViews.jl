@@ -386,8 +386,10 @@ if Metal.functional()
             @test isstrided(A)
             B = StridedView(A)
             @test B isa StridedView
+            @test parent(B) isa MtlArray{T, 1}
             Metal.@allowscalar begin
                 @test B == A
+                @test parent(B) == reshape(A, :)
             end
         end
     end

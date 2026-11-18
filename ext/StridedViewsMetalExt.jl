@@ -6,6 +6,8 @@ using Metal: Adapt, MtlPtr
 
 const MtlStridedView{T, N, A <: MtlArray{T}} = StridedView{T, N, A}
 
+StridedViews._normalizeparent(A::MtlArray, offset::Int) = reshape(A, length(A)), offset
+
 function Base.pointer(x::MtlStridedView{T}) where {T}
     return Base.unsafe_convert(MtlPtr{T}, pointer(x.parent, x.offset + 1))
 end
