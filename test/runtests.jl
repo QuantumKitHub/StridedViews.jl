@@ -259,6 +259,61 @@ if !is_buildkite
         end
     end
 
+    @testset "stride normalization" begin
+        # reference implementation (previous version of `_normalizestrides`)
+        function normalizestrides_ref(size::Dims{N}, strides::Dims{N}) where {N}
+            for i in 1:N
+                if size[i] == 1
+                    newstride = i == 1 ? 1 : strides[i - 1] * size[i - 1]
+                    strides = Base.setindex(strides, newstride, i)
+                elseif size[i] == 0
+                    return (1, Base.front(cumprod(size))...)
+                end
+            end
+            return strides
+        end
+        @test @inferred(StridedViews._normalizestrides((), ())) == ()
+        for N in 1:6, _ in 1:200
+            sz = ntuple(_ -> rand((0, 1, 1, 2, 3)), N)
+            st = ntuple(_ -> rand(-5:20), N)
+            @test @inferred(StridedViews._normalizestrides(sz, st)) ==
+                normalizestrides_ref(sz, st)
+        end
+        @test StridedViews._normalizestrides((1, 1, 3, 1, 2), (7, 7, 5, 7, 2)) ==
+            (1, 1, 5, 15, 2)
+    end
+
+    @testset "unsafe_stridedview with a StridedView" begin
+        A = randn(ComplexF64, 4, 3, 2)
+        B = conj(StridedView(A))
+        @test StridedViews.unsafe_stridedview(B) === B
+        C = @inferred StridedViews.unsafe_stridedview(B, (4, 6), (1, 4))
+        @test C isa StridedView{ComplexF64, 2, typeof(B.parent), typeof(conj)}
+        @test C == conj(reshape(A, (4, 6)))
+        # strides are used as given, e.g. zero strides for broadcasting
+        D = StridedViews.unsafe_stridedview(B, (4, 5), (1, 0), StridedViews.offset(B) + 4)
+        @test D == repeat(conj(A[:, 2, 1]), 1, 5)
+        @test strides(D) == (1, 0)
+    end
+
+    @testset "errors" begin
+        B = StridedView(randn(2, 3, 4))
+        err = try
+            permutedims(B, (1, 1, 2))
+        catch e
+            e
+        end
+        @test err isa ArgumentError
+        @test err.msg == "Invalid permutation of length 3: (1, 1, 2)"
+        @test_throws ArgumentError permutedims(B, (1, 2))
+        @test_throws ArgumentError permutedims(B, [3, 1])
+        @test_throws DimensionMismatch sreshape(B, (5, 5))
+        @test_throws StridedViews.ReshapeException sreshape(B[:, 1:2, :], (2, 8))
+        @test_throws ArgumentError StridedView(reinterpret(Float32, randn(4)))
+        A = randn(ComplexF64, 4)
+        @test_throws ArgumentError StridedView(reinterpret(NTuple{2, Float64}, conj(StridedView(A))))
+    end
+
     @testset "views with StridedView" begin
         @testset for T in (Float32, Float64, ComplexF32, ComplexF64)
             A = randn(T, (10, 10, 10, 10))

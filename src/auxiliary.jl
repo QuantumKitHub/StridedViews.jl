@@ -1,5 +1,19 @@
 # Auxiliary routines
 #---------------------
+# Errors are thrown from `@noinline` functions, so that building the exception and its
+# message does not end up in the code of the (often inlined) callers. Messages with
+# interpolation are `LazyString`s, so that they are only built when they are shown.
+@noinline _throw_dimensionmismatch() = throw(DimensionMismatch())
+@noinline function _throw_invalidperm(N::Int, p)
+    throw(ArgumentError(lazy"Invalid permutation of length $N: $p"))
+end
+@noinline function _throw_reinterpret_eltype(S::Type, T::Type)
+    throw(ArgumentError(lazy"Cannot create StridedView with reinterpretation from $S to $T"))
+end
+@noinline function _throw_reinterpret_op()
+    throw(ArgumentError("Cannot create StridedView with reinterpretation from view with non-identity operation"))
+end
+
 # Check whether p is a valid permutation of length N
 _isperm(N::Integer, p::AbstractVector) = (length(p) == N && isperm(p))
 _isperm(N::Integer, p::NTuple{M, Integer}) where {M} = (M == N && isperm(p))
@@ -30,20 +44,25 @@ function _simplifydims(size::Dims{N}, strides::Dims{N}) where {N}
 end
 
 # 'Normalize' the strides of a `StridedView`, i.e. strides associated with dimensions of
-# size 1 have no intrinsic meaning and can be changed arbitrarily. If one of the dimensions
-# has size zero, then the whole array has length zero, and all strides are ambiguous. All
-# ambiguous strides are set to 1.
-function _normalizestrides(size::Dims{N}, strides::Dims{N}) where {N}
-    for i in 1:N
-        if size[i] == 1
-            newstride = i == 1 ? 1 : strides[i - 1] * size[i - 1]
-            strides = Base.setindex(strides, newstride, i)
-        elseif size[i] == 0
-            return (1, Base.front(cumprod(size))...)
-        end
-    end
-    return strides
+# size 1 have no intrinsic meaning and can be changed arbitrarily. They are set to the extent
+# of the preceding dimension (stride times size), or 1 for leading dimensions of size 1, such
+# that a size 1 dimension never prevents fusing its neighbours. If one of the dimensions has
+# size zero, then the whole array has length zero, and all strides are ambiguous; they are
+# set to those of a contiguous array.
+# The strides are computed with a fully unrolled scan that carries the extent of the
+# preceding dimension.
+@inline function _normalizestrides(size::Dims{N}, strides::Dims{N}) where {N}
+    any(iszero, size) && return _contiguousstrides(size)
+    return first(_normalizestrides_scan(size, strides, 1))
 end
+_normalizestrides_scan(::Tuple{}, ::Tuple{}, carry::Int) = ((), carry)
+@inline function _normalizestrides_scan(size::Dims, strides::Dims, carry::Int)
+    s = ifelse(size[1] == 1, carry, strides[1])
+    rest, _ = _normalizestrides_scan(tail(size), tail(strides), size[1] * s)
+    return (s, rest...), carry
+end
+_contiguousstrides(::Tuple{}) = ()
+@inline _contiguousstrides(size::Dims) = (1, Base.front(cumprod(size))...)
 
 # 'Normalize' the layout of a DenseArray, in order to reduce the number of required
 # specializations in functions. The offset is adjusted to the start of `A` in the
@@ -113,11 +132,11 @@ function _computereshapestrides(
         newsize::Tuple{}, oldsize::Dims{N},
         strides::Dims{N}
     ) where {N}
-    all(isequal(1), oldsize) || throw(DimensionMismatch())
+    all(isequal(1), oldsize) || _throw_dimensionmismatch()
     return ()
 end
 function _computereshapestrides(newsize::Dims, oldsize::Tuple{}, strides::Tuple{})
-    all(isequal(1), newsize) || throw(DimensionMismatch())
+    all(isequal(1), newsize) || _throw_dimensionmismatch()
     return newsize
 end
 function _computereshapestrides(newsize::Dims, oldsize::Dims{N}, strides::Dims{N}) where {N}
@@ -137,10 +156,7 @@ function _computereshapestrides(newsize::Dims, oldsize::Dims{N}, strides::Dims{N
             return isnothing(stail) ? nothing : (s1, stail...)
         end
     else
-        if prod(newsize) != prod(oldsize)
-            throw(DimensionMismatch())
-        else
-            return nothing
-        end
+        prod(newsize) == prod(oldsize) || _throw_dimensionmismatch()
+        return nothing
     end
 end
