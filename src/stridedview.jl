@@ -167,7 +167,8 @@ end
 end
 
 # Indexing with slice indices to create a new view.
-function Base.getindex(a::StridedView{T, N}, I::Vararg{SliceIndex, N}) where {T, N}
+@inline function Base.getindex(a::StridedView{<:Any, N}, I::Vararg{SliceIndex, N}) where {N}
+    @boundscheck checkbounds(a, I...)
     newsize = _computeviewsize(a.size, I)
     newstrides = _normalizestrides(newsize, _computeviewstrides(a.strides, I))
     return unsafe_stridedview(a, newsize, newstrides, a.offset + _computeviewoffset(a.strides, I))
@@ -253,18 +254,24 @@ end
 # Creating or transforming StridedView by slicing
 #-------------------------------------------------
 # we cannot use Base.view, as this also accepts indices that might not preserve stridedness
-sview(a::StridedView{<:Any, N}, I::Vararg{SliceIndex, N}) where {N} = getindex(a, I...)
-sview(a::StridedView, I::SliceIndex) = getindex(sreshape(a, (length(a),)), I)
+@propagate_inbounds function sview(a::StridedView{<:Any, N}, I::Vararg{SliceIndex, N}) where {N}
+    return getindex(a, I...)
+end
+@propagate_inbounds function sview(a::StridedView, I::SliceIndex)
+    return getindex(sreshape(a, (length(a),)), I)
+end
 
 # for StridedView and index arguments which preserve stridedness, we do replace Base.view
 # with sview
-Base.view(a::StridedView{<:Any, N}, I::Vararg{SliceIndex, N}) where {N} = getindex(a, I...)
+@propagate_inbounds function Base.view(a::StridedView{<:Any, N}, I::Vararg{SliceIndex, N}) where {N}
+    return getindex(a, I...)
+end
 
 # `sview` can be used as a constructor when acting on `AbstractArray` objects
-function sview(a::AbstractArray{<:Any, N}, I::Vararg{SliceIndex, N}) where {N}
+@propagate_inbounds function sview(a::AbstractArray{<:Any, N}, I::Vararg{SliceIndex, N}) where {N}
     return getindex(StridedView(a), I...)
 end
-function sview(a::AbstractArray, I::SliceIndex)
+@propagate_inbounds function sview(a::AbstractArray, I::SliceIndex)
     return getindex(sreshape(StridedView(a), (length(a),)), I)
 end
 
@@ -288,8 +295,8 @@ end
 sreshape(a, args::Vararg{Int}) = sreshape(a, args)
 function sreshape(a::StridedView, newsize::Dims)
     size(a) == newsize && return a
+    prod(newsize) == length(a) || _throw_reshape_dimensionmismatch(size(a), newsize)
     if any(isequal(0), newsize)
-        any(isequal(0), size(a)) || _throw_dimensionmismatch()
         newstrides = one.(newsize)
     else
         newstrides = _computereshapestrides(newsize, _simplifydims(size(a), strides(a))...)

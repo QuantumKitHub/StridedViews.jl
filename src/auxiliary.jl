@@ -3,7 +3,9 @@
 # Errors are thrown from `@noinline` functions, so that building the exception and its
 # message does not end up in the code of the (often inlined) callers. Messages with
 # interpolation are `LazyString`s, so that they are only built when they are shown.
-@noinline _throw_dimensionmismatch() = throw(DimensionMismatch())
+@noinline function _throw_reshape_dimensionmismatch(oldsize::Dims, newsize::Dims)
+    throw(DimensionMismatch(lazy"Cannot reshape a StridedView of size $oldsize (length $(prod(oldsize))) to size $newsize (length $(prod(newsize)))"))
+end
 @noinline function _throw_invalidperm(N::Int, p)
     throw(ArgumentError(lazy"Invalid permutation of length $N: $p"))
 end
@@ -15,9 +17,35 @@ end
 end
 
 # Check whether p is a valid permutation of length N
-_isperm(N::Integer, p::AbstractVector) = (length(p) == N && isperm(p))
-_isperm(N::Integer, p::NTuple{M, Integer}) where {M} = (M == N && isperm(p))
+# For N <= 64, the entries are recorded as bits in a mask: N entries that are all in `1:N` form
+# a permutation if and only if together they set all N bits. This takes O(N) operations
+# without branches or allocations, whereas `Base.isperm` compares all pairs for tuples
+# (O(N^2)) and allocates for vectors. For N <= 4, `Base.isperm` is just as fast for tuples.
+_isperm(N::Integer, p::NTuple{M, Integer}) where {M} = M == N && _isperm_tuple(p)
+_isperm(N::Integer, p::AbstractVector{<:Integer}) = length(p) == N && _isperm_vector(p)
+_isperm(N::Integer, p::AbstractVector) = length(p) == N && isperm(p)
 _isperm(N::Integer, p) = false
+
+@inline function _isperm_tuple(p::NTuple{N, Integer}) where {N}
+    (N <= 4 || N > 64) && return isperm(p)
+    return _isperm_mask(p, N)
+end
+function _isperm_vector(p::AbstractVector{<:Integer})
+    length(p) > 64 && return isperm(p)
+    return _isperm_mask(p, length(p))
+end
+@inline function _isperm_mask(p, N::Int)
+    used = zero(UInt64)
+    valid = true
+    for x in p
+        valid &= (1 <= x <= N)
+        # `% Int` and `& 63` keep the shift well defined (and branch free) for invalid entries,
+        # which are rejected through `valid`
+        used |= one(UInt64) << (((x % Int) - 1) & 63)
+    end
+    full = N == 64 ? typemax(UInt64) : (one(UInt64) << N) - one(UInt64)
+    return valid & (used == full)
+end
 
 # Compute the memory index given a list of cartesian indices and corresponding strides
 @inline function _computeind(indices::NTuple{N, Int}, strides::NTuple{N, Int}) where {N}
@@ -126,19 +154,13 @@ _computeviewoffset(::Tuple{}, ::Tuple{}) = 0
 # Auxiliary methods for `sreshape`
 #----------------------------------
 # Compute the new strides of a (strided) reshape given the original strides and new and
-# original sizes
+# original sizes, or `nothing` if the reshape is not possible without copying.
+# Callers guarantee that `prod(newsize) == prod(oldsize)`, which is preserved in the
+# recursion: once one of the sizes is exhausted, the remaining dimensions of the other one
+# all have size 1.
 _computereshapestrides(newsize::Tuple{}, oldsize::Tuple{}, strides::Tuple{}) = strides
-function _computereshapestrides(
-        newsize::Tuple{}, oldsize::Dims{N},
-        strides::Dims{N}
-    ) where {N}
-    all(isequal(1), oldsize) || _throw_dimensionmismatch()
-    return ()
-end
-function _computereshapestrides(newsize::Dims, oldsize::Tuple{}, strides::Tuple{})
-    all(isequal(1), newsize) || _throw_dimensionmismatch()
-    return newsize
-end
+_computereshapestrides(newsize::Tuple{}, oldsize::Dims, strides::Dims) = ()
+_computereshapestrides(newsize::Dims, oldsize::Tuple{}, strides::Tuple{}) = newsize
 function _computereshapestrides(newsize::Dims, oldsize::Dims{N}, strides::Dims{N}) where {N}
     d, r = divrem(oldsize[1], newsize[1])
     return if r == 0
@@ -156,7 +178,6 @@ function _computereshapestrides(newsize::Dims, oldsize::Dims{N}, strides::Dims{N
             return isnothing(stail) ? nothing : (s1, stail...)
         end
     else
-        prod(newsize) == prod(oldsize) || _throw_dimensionmismatch()
         return nothing
     end
 end

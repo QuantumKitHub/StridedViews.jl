@@ -296,6 +296,45 @@ if !is_buildkite
         @test strides(D) == (1, 0)
     end
 
+    @testset "permutation check" begin
+        mask(p) = StridedViews._isperm_mask(p, length(p))
+        # exhaustive for small lengths, including out of range entries
+        for N in 0:5, t in Iterators.product(ntuple(_ -> -1:(N + 1), N)...)
+            @test mask(t) == isperm(t)
+            @test StridedViews._isperm(N, t) == isperm(t)
+            @test StridedViews._isperm(N, collect(Int, t)) == isperm(t)
+        end
+        for N in (6, 10, 17, 63, 64, 65), _ in 1:50
+            p = randperm(N)
+            @test StridedViews._isperm(N, Tuple(p))
+            @test StridedViews._isperm(N, p)
+            @test StridedViews._isperm(N, UInt8.(p))
+            q = copy(p)
+            q[rand(1:N)] = rand((0, -1, N + 1, typemin(Int), p[mod1(rand(1:N), N)]))
+            isperm(q) && continue # the replacement can be the original entry
+            @test !StridedViews._isperm(N, Tuple(q))
+            @test !StridedViews._isperm(N, q)
+        end
+        @test !StridedViews._isperm(3, (1, 2))
+        @test !StridedViews._isperm(2, [1, 2, 3])
+        @test !StridedViews._isperm(2, (UInt(2)^63 + 1, 1))
+        @test !StridedViews._isperm(2, "ab")
+    end
+
+    @testset "bounds checks when slicing" begin
+        A = randn(3, 4, 5)
+        B = StridedView(A)
+        @test_throws BoundsError B[1:4, :, :]
+        @test_throws BoundsError B[0:2, :, 1]
+        @test_throws BoundsError B[:, 5, :]
+        @test_throws BoundsError view(B, :, :, 2:6)
+        @test_throws BoundsError sview(B, :, 1:2:5, 1)
+        @test_throws BoundsError sview(B, 1:61)
+        @test_throws BoundsError sview(A, 3:4, :, :)
+        @test B[3:-1:1, 4:-2:1, 1:0] == A[3:-1:1, 4:-2:1, 1:0]
+        @test sview(B, 60:-7:1) == vec(A)[60:-7:1]
+    end
+
     @testset "errors" begin
         B = StridedView(randn(2, 3, 4))
         err = try
@@ -308,6 +347,15 @@ if !is_buildkite
         @test_throws ArgumentError permutedims(B, (1, 2))
         @test_throws ArgumentError permutedims(B, [3, 1])
         @test_throws DimensionMismatch sreshape(B, (5, 5))
+        err = try
+            sreshape(B, (5, 5))
+        catch e
+            e
+        end
+        @test sprint(showerror, err) ==
+            "DimensionMismatch: Cannot reshape a StridedView of size (2, 3, 4) (length 24) to size (5, 5) (length 25)"
+        @test_throws DimensionMismatch sreshape(StridedView(zeros(2, 0)), (3, 1))
+        @test_throws DimensionMismatch sreshape(B, (2, 3, 4, 0))
         @test_throws StridedViews.ReshapeException sreshape(B[:, 1:2, :], (2, 8))
         @test_throws ArgumentError StridedView(reinterpret(Float32, randn(4)))
         A = randn(ComplexF64, 4)
