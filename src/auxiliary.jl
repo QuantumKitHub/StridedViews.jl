@@ -164,7 +164,7 @@ _computereshapestrides(newsize::Tuple{}, oldsize::Dims, strides::Dims) = ()
 _computereshapestrides(newsize::Dims, oldsize::Tuple{}, strides::Tuple{}) = newsize
 function _computereshapestrides(newsize::Dims, oldsize::Dims{N}, strides::Dims{N}) where {N}
     d, r = divrem(oldsize[1], newsize[1])
-    return if r == 0
+    if r == 0
         s1 = strides[1]
         if d == 1
             # not shrinking the following tuples helps type inference
