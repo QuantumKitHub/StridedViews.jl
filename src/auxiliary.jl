@@ -21,19 +21,20 @@ end
 # a permutation if and only if together they set all N bits. This takes O(N) operations
 # without branches or allocations, whereas `Base.isperm` compares all pairs for tuples
 # (O(N^2)) and allocates for vectors. For N <= 4, `Base.isperm` is just as fast for tuples.
-_isperm(N::Integer, p::NTuple{M, Integer}) where {M} = M == N && _isperm_tuple(p)
-_isperm(N::Integer, p::AbstractVector{<:Integer}) = length(p) == N && _isperm_vector(p)
+@inline function _isperm(N::Integer, p::NTuple{M, Integer}) where {M}
+    M == N || return false
+    # `M` is known at compile time, so only one of the branches remains
+    (M <= 4 || M > 64) && return isperm(p)
+    return _isperm_mask(p, M)
+end
+function _isperm(N::Integer, p::AbstractVector{<:Integer})
+    length(p) == N || return false
+    N > 64 && return isperm(p)
+    return _isperm_mask(p, Int(N))
+end
 _isperm(N::Integer, p::AbstractVector) = length(p) == N && isperm(p)
 _isperm(N::Integer, p) = false
 
-@inline function _isperm_tuple(p::NTuple{N, Integer}) where {N}
-    (N <= 4 || N > 64) && return isperm(p)
-    return _isperm_mask(p, N)
-end
-function _isperm_vector(p::AbstractVector{<:Integer})
-    length(p) > 64 && return isperm(p)
-    return _isperm_mask(p, length(p))
-end
 @inline function _isperm_mask(p, N::Int)
     used = zero(UInt64)
     valid = true
