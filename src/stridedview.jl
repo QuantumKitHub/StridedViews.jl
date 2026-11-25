@@ -58,15 +58,31 @@ end
 
 """
     unsafe_stridedview(T, parent, size, strides, offset, op)
+    unsafe_stridedview(a::StridedView, size = size(a), strides = strides(a), offset = offset(a))
 
-Construct a `StridedView{T}` without normalizing `parent` and `strides`, which are assumed to
-be normalized already, e.g. because they are taken from an existing `StridedView`.
+Construct a `StridedView{T}` without normalizing `parent` and `strides`.
+
+The first form assumes these are normalized already, e.g. because they are taken from an
+existing `StridedView`. The second form keeps the element type, parent and operation of `a`
+and replaces its layout, which can have any number of dimensions. The strides are used as
+given, so they need not be normalized: e.g. a stride of zero repeats the same element along
+that dimension.
+
+!!! warning
+    No checks are performed: the caller is responsible for all indices in the new layout
+    being valid indices of the parent.
 """
-function unsafe_stridedview(
+@inline function unsafe_stridedview(
         ::Type{T}, parent::DenseArray, size::NTuple{N, Int}, strides::NTuple{N, Int},
         offset::Int, op::F
     ) where {T, N, F}
     return StridedView{T, N, typeof(parent), F}(parent, size, strides, offset, op)
+end
+@inline function unsafe_stridedview(
+        a::StridedView{T}, size::NTuple{N, Int} = a.size, strides::NTuple{N, Int} = a.strides,
+        offset::Int = a.offset
+    ) where {T, N}
+    return unsafe_stridedview(T, a.parent, size, strides, offset, a.op)
 end
 
 StridedView(a::StridedView) = a
@@ -81,9 +97,8 @@ function StridedView(a::Base.ReinterpretArray{T, N}) where {T, N}
     b = StridedView(a.parent)
     S = eltype(b)
     isbitstype(T) && isbitstype(S) && sizeof(T) == sizeof(S) ||
-        throw(ArgumentError("Cannot create StridedView with reinterpretation from $S to $T"))
-    b.op isa FN ||
-        throw(ArgumentError("Cannot create StridedView with reinterpretation from view with non-identity operation"))
+        _throw_reinterpret_eltype(S, T)
+    b.op isa FN || _throw_reinterpret_op()
     return unsafe_stridedview(T, b.parent, size(b), strides(b), offset(b), identity)
 end
 
@@ -118,7 +133,7 @@ _strides(a::Transpose{<:Any, <:AbstractVector}) = (stride(a.parent, 2), stride(a
 _strides(a::Transpose{<:Any, <:AbstractMatrix}) = reverse(strides(a.parent))
 function _strides(a::PermutedDimsArray{T, N, perm}) where {T, N, perm}
     s = _strides(parent(a))
-    return ntuple(d -> s[perm[d]], Val(N))
+    return ntuple(d -> @inbounds(s[perm[d]]), Val(N)) # `perm` is a valid permutation
 end
 _strides(a::SubArray) = Base.substrides(_strides(a.parent), a.indices)
 
@@ -152,13 +167,11 @@ end
 end
 
 # Indexing with slice indices to create a new view.
-function Base.getindex(a::StridedView{T, N}, I::Vararg{SliceIndex, N}) where {T, N}
+@inline function Base.getindex(a::StridedView{<:Any, N}, I::Vararg{SliceIndex, N}) where {N}
+    @boundscheck checkbounds(a, I...)
     newsize = _computeviewsize(a.size, I)
     newstrides = _normalizestrides(newsize, _computeviewstrides(a.strides, I))
-    return unsafe_stridedview(
-        T, a.parent, newsize, newstrides,
-        a.offset + _computeviewoffset(a.strides, I), a.op
-    )
+    return unsafe_stridedview(a, newsize, newstrides, a.offset + _computeviewoffset(a.strides, I))
 end
 
 # Indexing directly into parent array
@@ -192,11 +205,12 @@ function Base.conj(a::StridedView)
     return unsafe_stridedview(T, a.parent, a.size, a.strides, a.offset, newop)
 end
 
-function Base.permutedims(a::StridedView{T, N}, p) where {T, N}
-    _isperm(N, p) || throw(ArgumentError("Invalid permutation of length $N: $p"))
-    newsize = ntuple(n -> size(a, p[n]), Val(N))
-    newstrides = ntuple(n -> stride(a, p[n]), Val(N))
-    return unsafe_stridedview(T, a.parent, newsize, _normalizestrides(newsize, newstrides), a.offset, a.op)
+function Base.permutedims(a::StridedView{<:Any, N}, p) where {N}
+    _isperm(N, p) || _throw_invalidperm(N, p)
+    # `p` has been checked to be a permutation of `1:N`
+    newsize = ntuple(n -> @inbounds(a.size[p[n]]), Val(N))
+    newstrides = ntuple(n -> @inbounds(a.strides[p[n]]), Val(N))
+    return unsafe_stridedview(a, newsize, _normalizestrides(newsize, newstrides))
 end
 
 LinearAlgebra.transpose(a::StridedView{<:Number, 2}) = permutedims(a, (2, 1))
@@ -240,18 +254,24 @@ end
 # Creating or transforming StridedView by slicing
 #-------------------------------------------------
 # we cannot use Base.view, as this also accepts indices that might not preserve stridedness
-sview(a::StridedView{<:Any, N}, I::Vararg{SliceIndex, N}) where {N} = getindex(a, I...)
-sview(a::StridedView, I::SliceIndex) = getindex(sreshape(a, (length(a),)), I)
+@propagate_inbounds function sview(a::StridedView{<:Any, N}, I::Vararg{SliceIndex, N}) where {N}
+    return getindex(a, I...)
+end
+@propagate_inbounds function sview(a::StridedView, I::SliceIndex)
+    return getindex(sreshape(a, (length(a),)), I)
+end
 
 # for StridedView and index arguments which preserve stridedness, we do replace Base.view
 # with sview
-Base.view(a::StridedView{<:Any, N}, I::Vararg{SliceIndex, N}) where {N} = getindex(a, I...)
+@propagate_inbounds function Base.view(a::StridedView{<:Any, N}, I::Vararg{SliceIndex, N}) where {N}
+    return getindex(a, I...)
+end
 
 # `sview` can be used as a constructor when acting on `AbstractArray` objects
-function sview(a::AbstractArray{<:Any, N}, I::Vararg{SliceIndex, N}) where {N}
+@propagate_inbounds function sview(a::AbstractArray{<:Any, N}, I::Vararg{SliceIndex, N}) where {N}
     return getindex(StridedView(a), I...)
 end
-function sview(a::AbstractArray, I::SliceIndex)
+@propagate_inbounds function sview(a::AbstractArray, I::SliceIndex)
     return getindex(sreshape(StridedView(a), (length(a),)), I)
 end
 
@@ -267,19 +287,22 @@ function Base.show(io::IO, e::ReshapeException)
     msg = "Cannot reshape a StridedView with size $(e.oldsize) and strides $(e.strides) to newsize=$(e.newsize) without allocating, try `sreshape(copy(array), newsize)` or fall back to `reshape(array, newsize)`."
     return print(io, msg)
 end
+@noinline function _throw_reshapeexception(newsize::Dims, oldsize::Dims, strides::Dims)
+    throw(ReshapeException(newsize, oldsize, strides))
+end
 
 # we cannot use Base.reshape, as this also accepts indices that might not preserve stridedness
 sreshape(a, args::Vararg{Int}) = sreshape(a, args)
-function sreshape(a::StridedView{T}, newsize::Dims) where {T}
+function sreshape(a::StridedView, newsize::Dims)
     size(a) == newsize && return a
+    prod(newsize) == length(a) || _throw_reshape_dimensionmismatch(size(a), newsize)
     if any(isequal(0), newsize)
-        any(isequal(0), size(a)) || throw(DimensionMismatch())
         newstrides = one.(newsize)
     else
         newstrides = _computereshapestrides(newsize, _simplifydims(size(a), strides(a))...)
     end
-    isnothing(newstrides) && throw(ReshapeException(newsize, size(a), strides(a)))
-    return unsafe_stridedview(T, a.parent, newsize, _normalizestrides(newsize, newstrides), a.offset, a.op)
+    isnothing(newstrides) && _throw_reshapeexception(newsize, size(a), strides(a))
+    return unsafe_stridedview(a, newsize, _normalizestrides(newsize, newstrides))
 end
 
 sreshape(a::AbstractArray, newsize::Dims) = sreshape(StridedView(a), newsize)
